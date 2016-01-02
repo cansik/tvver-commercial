@@ -15,7 +15,10 @@ import ch.fhnw.ether.video.VideoFrame;
 
 import javax.imageio.ImageIO;
 
-public class CommercialDetector extends AbstractDetector {
+public class CommercialDetector extends AbstractDetector
+{
+	final int ELAPSED_TIME = 1000;
+
 	double start;
 	double duration;
 
@@ -25,7 +28,11 @@ public class CommercialDetector extends AbstractDetector {
 
 	boolean commercial = false;
 
+	int elapsedFrames = 0;
+
 	boolean training;
+
+	int commercialTime = 0;
 	
 	@Override
 	protected void init(URLVideoSource videoSource, File storageDirectory, boolean training) {
@@ -47,23 +54,32 @@ public class CommercialDetector extends AbstractDetector {
 		}
 		else
 		{
-			double sameness = compareImages(diffImage, getFramePart(videoFrame.getFrame()));
+			BufferedImage binaryFrame = getFramePart(videoFrame.getFrame());
+			double sameness = compareImages(diffImage, binaryFrame);
+
+			if(commercial)
+			{
+				commercialTime++;
+			}
 
 			//todo: set threshold
 			if(sameness < 0.9) {
 				if (!commercial) {
+					elapsedFrames = 0;
 					commercial = true;
 					System.out.println("Werbung ("+sameness + "): " + counter);
 					writeFrame(videoFrame, "comm_start");
+					writeImage(binaryFrame, "comm_start_binary");
 				}
 			}
 			else
 			{
-				if(commercial)
+				if(commercial && elapsedFrames > ELAPSED_TIME)
 				{
 					commercial = false;
 					System.out.println("Werbung ende ("+ sameness + "): " + counter);
 					writeFrame(videoFrame, "comm_end");
+					writeImage(binaryFrame, "comm_end_binary");
 				}
 			}
 		}
@@ -73,18 +89,17 @@ public class CommercialDetector extends AbstractDetector {
 		result.add(segment);
 		if (videoFrame.isLast()) {
 			// do some post-processing on segments here
+			out("Commercial Time: " + commercialTime);
 		}
 
-		if(counter == 100)
+		if(counter == 200)
 		{
+			out("training finished!");
 			training = false;
-			try {
-				ImageIO.write(diffImage, "BMP", new File("frames/" + counter + "trained.bmp"));
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
+			writeImage(diffImage, "trained");
 		}
 
+		elapsedFrames++;
 		counter++;
 	}
 
@@ -178,12 +193,7 @@ public class CommercialDetector extends AbstractDetector {
 		}
 
 		if(counter % 1000 == 0) {
-			try {
-				//ImageIO.write(image, "BMP", new File("frames/" + counter + "_aframe.bmp"));
-				ImageIO.write(diffImage, "BMP", new File("frames/" + counter + "_bdiff.bmp"));
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
+			writeImage(diffImage, "diff");
 		}
 	}
 
@@ -209,6 +219,15 @@ public class CommercialDetector extends AbstractDetector {
 	{
 		try {
 			videoFrame.getFrame().write(new File("frames/" + counter + "_" + name +".png"), Frame.FileFormat.PNG);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	void writeImage(BufferedImage image, String name)
+	{
+		try {
+			ImageIO.write(image, "PNG", new File("frames/" + counter + "_" + name + ".png"));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
