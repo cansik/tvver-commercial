@@ -9,6 +9,7 @@ import ch.fhnw.ether.image.Frame;
 import ch.fhnw.ether.image.ImageScaler;
 import ch.fhnw.ether.image.RGB8Frame;
 import ch.fhnw.ether.image.Frame.FileFormat;
+import ch.fhnw.ether.video.URLVideoSource;
 import ch.fhnw.ether.video.VideoFrame;
 import ch.fhnw.util.Log;
 import ch.fhnw.util.math.MathUtilities;
@@ -30,6 +31,12 @@ public class Marker extends AbstractDetector {
 	private final byte[]     rgb1 = new byte[3];
 	private       double     start;
 	private final FloatFrame corner = new FloatFrame(80, 40);
+	private       File       storge;
+	
+	@Override
+	protected void init(URLVideoSource videoSource, File storageDirectory, boolean training) {
+		this.storge = storageDirectory;
+	}
 	
 	/**
 	 * Process a video frame
@@ -37,7 +44,7 @@ public class Marker extends AbstractDetector {
 	 * @param result Add detected segments to this list.
 	 */
 	@Override
-	protected void process(VideoFrame videoFrame, List<Segment> result) {
+	protected void process(VideoFrame videoFrame, float[] audio, List<Segment> result) {
 		// get video frame pixels
 		Frame frame = videoFrame.getFrame();
 		// scale marker if necessary
@@ -95,9 +102,9 @@ public class Marker extends AbstractDetector {
 			// normalize corner image
 			corner.normalize();
 			// write corner image for debugging
-			corner.write(new File(getBaseName() + "_corner_" + (1000 + result.size())+ ".png"), FileFormat.PNG);
+			corner.write(new File(storge, getBaseName() + "_corner_" + (1000 + result.size())+ ".png"), FileFormat.PNG);
 			// write histogram for debugging
-			histogram(corner, 64).write(new File(getBaseName() + "_hist_" + (1000 + result.size())+ ".png"), FileFormat.PNG);
+			histogram(corner, 64).write(new File(storge, getBaseName() + "_hist_" + (1000 + result.size())+ ".png"), FileFormat.PNG);
 			// create segment
 			Segment segment = new Segment(start, time - start);
 			// save corner data for classification
@@ -137,6 +144,6 @@ public class Marker extends AbstractDetector {
 	}
 
 	private boolean isCommercial(Segment segment) {
-		return false;
+		return true;
 	}
 }

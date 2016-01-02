@@ -54,20 +54,34 @@ public class Main {
 	private static final boolean CREATE_PREVIEWS = true;
 
 	public static void main(String[] args) throws Throwable {
-		if(args.length <= 2) {
-			System.out.println("Usage:" + Main.class.getName() + " <detector class> <video file>");
+		if(args.length < 2) {
+			System.out.println("Usage:" + Main.class.getName() + " <detector class> <video file> [training]");
 			System.exit(1);
 		}
 
 		// Create detector
+		URLVideoSource   video    = new URLVideoSource(new File(args[1]).toURI().toURL(), 1);
 		AbstractDetector detector = (AbstractDetector) Class.forName(Main.class.getPackage().getName() + "." + args[0]).newInstance();
+		String           baseName = TextUtilities.getFileNameWithoutExtension(args[1]);
+		File             storage  = new File(args[0] + "_" + baseName);
+		if(!(storage.exists())) {
+			if(!(storage.mkdirs())) {
+				System.out.println("Could not create '" + storage.getAbsolutePath() + "'");
+				System.exit(1);
+			}
+		} else if(!(storage.isDirectory())) {
+			System.out.println("'" + storage.getAbsolutePath() + "' exists. Please delete.");
+			System.exit(1);
+		}
+		if(args.length > 2)  detector.initInternal(video, storage, args[2].startsWith("t"));
+		else                 detector.initInternal(video, storage, false);
 		// Detect commercials
 		List<Segment> result = new ArrayList<>();
-		long time = detector.detect(new URLVideoSource(new File(args[1]).toURI().toURL(), 1), result);
+		long time = detector.detect(video, result);
 		System.out.println("Time: " + time / ITimebase.SEC2NS + " sec");
 
 		// create resulting edl file
-		try(FileWriter out = new FileWriter(new File(TextUtilities.stripFileExtension(args[1]) + "_segments.edl"))) {
+		try(FileWriter out = new FileWriter(new File(storage, baseName + "_segments.edl"))) {
 			for(Segment s : result)
 				if(s.commercial)
 					out.write(s.start + "\t" + (s.start + s.duration) + "\t" + EDLFile.COMMERCIAL_BREAK + "\n");
@@ -81,8 +95,8 @@ public class Main {
 			for(Segment s : result) {
 				program.setTarget(null);
 				final PreviewTarget target  = new PreviewTarget(4096, 64, s.duration);
-				File file = new File(TextUtilities.stripFileExtension(args[1]) + "_" + (i + 1000) + (s.commercial ? "c.png" : ".png"));
-				System.out.println("Writing '" + file.getName() + "' " + i + "/" + result.size() + " (" + s + ")...");
+				File file = new File(storage, baseName + "_" + (i + 1000) + (s.commercial ? "c.png" : ".png"));
+				System.out.println("Writing '" + file.getAbsolutePath() + "' " + i + "/" + result.size() + " (" + s + ")...");
 				target.useProgram((RenderProgram<IVideoRenderTarget>)program);
 				target.start();
 				target.sleepUntil(IScheduler.NOT_RENDERING);
