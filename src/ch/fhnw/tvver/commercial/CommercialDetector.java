@@ -134,16 +134,14 @@ public class CommercialDetector extends AbstractDetector
 	BufferedImage getFramePart(Frame frame)
 	{
 		//todo: calculate dynamically
-		int offsetX = 200;
-		int offsetY = 200;
+		int offsetX = frame.width; //200;
+		int offsetY = frame.height; //200;
 
 		BufferedImage image = new BufferedImage(offsetX, offsetY, BufferedImage.TYPE_INT_RGB);
 
 		//get upper right corner
 		int x = frame.width - offsetX;
 		int y = frame.height - offsetY;
-		int w = frame.width;
-		int h = frame.height;
 
 		for (int i = 0; i < offsetX; i++) {
 			for (int j = 0; j < offsetY; j++) {
