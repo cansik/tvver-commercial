@@ -18,20 +18,18 @@ import javax.imageio.ImageIO;
 public class CommercialDetector extends AbstractDetector
 {
 	final int ELAPSED_TIME = 1000;
+	final int TRAINING_TIME = 400;
 
 	double start;
 	double duration;
 
-	int counter = 0;
-
 	BufferedImage diffImage = null;
 
 	boolean commercial = false;
-
-	int elapsedFrames = 0;
-
 	boolean training;
 
+	int counter = 0;
+	int elapsedFrames = 0;
 	int commercialTime = 0;
 	
 	@Override
@@ -92,7 +90,7 @@ public class CommercialDetector extends AbstractDetector
 			out("Commercial Time: " + commercialTime);
 		}
 
-		if(counter == 200)
+		if(counter == TRAINING_TIME)
 		{
 			out("training finished!");
 			training = false;
@@ -190,7 +188,7 @@ public class CommercialDetector extends AbstractDetector
 			}
 		}
 
-		if(counter % 1000 == 0) {
+		if(counter % 10 == 0) {
 			writeImage(diffImage, "diff");
 		}
 	}
