@@ -6,6 +6,7 @@ import java.awt.image.ColorModel;
 import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -18,10 +19,11 @@ import javax.imageio.ImageIO;
 public class CommercialDetector extends AbstractDetector
 {
 	final int ELAPSED_TIME = 1000;
-	final int TRAINING_TIME = 400;
+	final int TRAINING_TIME = 200;
+	final int SPEED = 1;
+	final int WHOLE_SIZE = 1500;
 
-	double start;
-	double duration;
+	final int FRAMERATE = 200;
 
 	BufferedImage diffImage = null;
 
@@ -31,7 +33,16 @@ public class CommercialDetector extends AbstractDetector
 	int counter = 0;
 	int elapsedFrames = 0;
 	int commercialTime = 0;
-	
+
+	//segment informations with frameCount
+	int commercial_start = 0;
+	int commercial_length = 0;
+
+    double commercial_start_time = 0d;
+
+	List<Integer> diffXValues = new ArrayList<>();
+	List<Integer> diffYValues = new ArrayList<>();
+
 	@Override
 	protected void init(URLVideoSource videoSource, File storageDirectory, boolean training) {
 		training = true;
@@ -40,10 +51,10 @@ public class CommercialDetector extends AbstractDetector
 	
 	@Override
 	protected void process(VideoFrame videoFrame, float[] audio, List<Segment> result) {
-		// process video frame
 
+		// process video frame
 		if (videoFrame.isKeyframe()) {
-			out(counter + ": Key!");
+			out(counter + ": Key! " + videoFrame.playOutTime);
 		}
 
 		if(training)
@@ -52,42 +63,67 @@ public class CommercialDetector extends AbstractDetector
 		}
 		else
 		{
-			BufferedImage binaryFrame = getFramePart(videoFrame.getFrame());
-			double sameness = compareImages(diffImage, binaryFrame);
-
 			if(commercial)
 			{
 				commercialTime++;
+				commercial_length++;
 			}
 
-			//todo: set threshold
-			if(sameness < 0.9) {
-				if (!commercial) {
-					elapsedFrames = 0;
-					commercial = true;
-					System.out.println("Werbung ("+sameness + "): " + counter);
-					writeFrame(videoFrame, "comm_start");
-					writeImage(binaryFrame, "comm_start_binary");
+			if(counter % SPEED == 0) {
+				Frame frame = videoFrame.getFrame();
+				BufferedImage binaryFrame = getFramePart(frame);
+				double sameness = compareImagesFast(binaryFrame); //compareImages(diffImage, binaryFrame);
+
+				//todo: set threshold
+				if (sameness < 0.9) {
+					if (!commercial) {
+						elapsedFrames = 0;
+						commercial = true;
+
+						commercial_start = counter;
+						commercial_length = 0;
+
+                        commercial_start_time = videoFrame.playOutTime;
+
+						System.out.println("Werbung (" + sameness + "): " + counter);
+						writeFrame(videoFrame, "comm_start");
+						writeImage(binaryFrame, "comm_start_binary");
+					}
+				} else {
+					if (commercial && elapsedFrames > ELAPSED_TIME) {
+						commercial = false;
+
+						Segment segment = new Segment(commercial_start, commercial_length, true);
+						result.add(segment);
+
+						System.out.println("Werbung ende (" + sameness + "): " + counter);
+						writeFrame(videoFrame, "comm_end");
+						writeImage(binaryFrame, "comm_end_binary");
+					}
 				}
 			}
-			else
-			{
-				if(commercial && elapsedFrames > ELAPSED_TIME)
-				{
-					commercial = false;
-					System.out.println("Werbung ende ("+ sameness + "): " + counter);
-					writeFrame(videoFrame, "comm_end");
-					writeImage(binaryFrame, "comm_end_binary");
-				}
-			}
+            else
+            {
+                videoFrame.skip();
+            }
 		}
 
-		// create and add segment when commercial/non-commercial block is detected
-		Segment segment = new Segment(start, duration);
-		result.add(segment);
 		if (videoFrame.isLast()) {
 			// do some post-processing on segments here
 			out("Commercial Time: " + commercialTime);
+
+			//post process
+			postProcessSegments(result);
+
+			//sum up segments of commercial
+			int cmt = 0;
+			for(Segment s : result)
+			{
+				if(s.commercial)
+					cmt += s.duration;
+			}
+
+			out("Commercial Segment Time: " + cmt);
 		}
 
 		if(counter == TRAINING_TIME)
@@ -95,10 +131,67 @@ public class CommercialDetector extends AbstractDetector
 			out("training finished!");
 			training = false;
 			writeImage(diffImage, "trained");
+			createOptimizedDiffImage();
 		}
 
 		elapsedFrames++;
 		counter++;
+	}
+
+	/***
+	 * Fills spaces with commercial or normal
+	 */
+	void postProcessSegments(List<Segment> result)
+	{
+		for(int i = 0; i < result.size() - 1; i++)
+		{
+			Segment current = result.get(i);
+			Segment next = result.get(i+1);
+
+			double currentEnd = current.start + current.duration;
+			double delta = next.start - currentEnd;
+
+			//sum both together if delta is less then x
+			if(delta < WHOLE_SIZE)
+			{
+				result.remove(current);
+				result.remove(next);
+				result.add(0, new Segment(current.start, current.duration + delta + next.duration, true));
+				i--;
+			}
+		}
+	}
+
+	void createOptimizedDiffImage()
+	{
+		for (int v = 0; v < diffImage.getHeight(); v++) {
+			for (int u = 0; u < diffImage.getWidth(); u++) {
+				int value = diffImage.getRGB(u, v);
+				if (value == Color.BLACK.getRGB()) {
+					diffXValues.add(u);
+					diffYValues.add(v);
+				}
+			}
+		}
+	}
+
+	double compareImagesFast(BufferedImage img)
+	{
+		int sameCount = 0;
+		int blackCount = diffXValues.size();
+
+		for(int i = 0; i < diffXValues.size(); i++)
+		{
+			int u = diffXValues.get(i);
+			int v = diffYValues.get(i);
+			int value = img.getRGB(u, v);
+
+			if (value == Color.BLACK.getRGB()) {
+				sameCount++;
+			}
+		}
+
+		return (double)sameCount / blackCount;
 	}
 
 	/***

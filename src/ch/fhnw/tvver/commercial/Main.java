@@ -51,7 +51,7 @@ import ch.fhnw.util.TextUtilities;
  *
  */
 public class Main {
-	private static final boolean CREATE_PREVIEWS = true;
+	private static final boolean CREATE_PREVIEWS = false;
 
 	public static void main(String[] args) throws Throwable {
 		if(args.length < 2) {
