@@ -19,8 +19,8 @@ import javax.imageio.ImageIO;
 public class CommercialDetector extends AbstractDetector
 {
 	final int ELAPSED_TIME = 1000;
-	final int TRAINING_TIME = 200;
-	final int SPEED = 1;
+	final int TRAINING_TIME = 400;
+	final int SPEED = 200;
 	final int WHOLE_SIZE = 1500;
 
 	final int FRAMERATE = 200;
@@ -44,9 +44,14 @@ public class CommercialDetector extends AbstractDetector
 	List<Integer> diffYValues = new ArrayList<>();
 
 	@Override
-	protected void init(URLVideoSource videoSource, File storageDirectory, boolean training) {
-		training = true;
+	protected void init(URLVideoSource videoSource, File storageDirectory, boolean training){
 		this.training = training;
+
+		if(!training)
+		{
+			diffImage = loadLearned();
+			createOptimizedDiffImage();
+		}
 	}
 	
 	@Override
@@ -93,10 +98,10 @@ public class CommercialDetector extends AbstractDetector
 					if (commercial && elapsedFrames > ELAPSED_TIME) {
 						commercial = false;
 
-						Segment segment = new Segment(commercial_start, commercial_length, true);
+						Segment segment = new Segment(commercial_start_time, videoFrame.playOutTime - commercial_start_time, true);
 						result.add(segment);
 
-						System.out.println("Werbung ende (" + sameness + "): " + counter);
+						System.out.println("Werbung ende (" + sameness + "): " + videoFrame.playOutTime);
 						writeFrame(videoFrame, "comm_end");
 						writeImage(binaryFrame, "comm_end_binary");
 					}
@@ -115,6 +120,8 @@ public class CommercialDetector extends AbstractDetector
 			//post process
 			postProcessSegments(result);
 
+			//add segments between
+
 			//sum up segments of commercial
 			int cmt = 0;
 			for(Segment s : result)
@@ -126,12 +133,14 @@ public class CommercialDetector extends AbstractDetector
 			out("Commercial Segment Time: " + cmt);
 		}
 
-		if(counter == TRAINING_TIME)
+		if(this.training && counter == TRAINING_TIME)
 		{
 			out("training finished!");
 			training = false;
 			writeImage(diffImage, "trained");
+			saveLearned(diffImage);
 			createOptimizedDiffImage();
+			System.exit(0);
 		}
 
 		elapsedFrames++;
@@ -320,6 +329,25 @@ public class CommercialDetector extends AbstractDetector
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+	}
+
+	void saveLearned(BufferedImage image)
+	{
+		try {
+			ImageIO.write(image, "PNG", new File("frames/learned.png"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	BufferedImage loadLearned()
+	{
+		try {
+			return ImageIO.read(new File("frames/learned.png"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return null;
 	}
 
 	public static BufferedImage copyImage(BufferedImage source){
