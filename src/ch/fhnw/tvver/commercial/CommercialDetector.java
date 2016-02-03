@@ -6,6 +6,7 @@ import java.awt.image.ColorModel;
 import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -20,7 +21,7 @@ public class CommercialDetector extends AbstractDetector
 {
 	final int ELAPSED_TIME = 1000;
 	final int TRAINING_TIME = 400;
-	final int SPEED = 200;
+	final int SPEED = 5;
 	final int WHOLE_SIZE = 1500;
 
 	final int FRAMERATE = 200;
@@ -40,6 +41,8 @@ public class CommercialDetector extends AbstractDetector
 
     double commercial_start_time = 0d;
 
+	double currentTime = 0;
+
 	List<Integer> diffXValues = new ArrayList<>();
 	List<Integer> diffYValues = new ArrayList<>();
 
@@ -56,6 +59,8 @@ public class CommercialDetector extends AbstractDetector
 	
 	@Override
 	protected void process(VideoFrame videoFrame, float[] audio, List<Segment> result) {
+
+		currentTime = videoFrame.playOutTime;
 
 		// process video frame
 		if (videoFrame.isKeyframe()) {
@@ -121,16 +126,23 @@ public class CommercialDetector extends AbstractDetector
 			postProcessSegments(result);
 
 			//add segments between
+			ArrayList<Segment> normalSegments = postFillSegments(result);
+			result.addAll(normalSegments);
 
 			//sum up segments of commercial
-			int cmt = 0;
+			double cmt = 0;
+			double nt = 0;
 			for(Segment s : result)
 			{
 				if(s.commercial)
 					cmt += s.duration;
+				else
+					nt += s.duration;
 			}
 
+			out("Normal Time: " + nt);
 			out("Commercial Segment Time: " + cmt);
+			out("Full Time: " + currentTime);
 		}
 
 		if(this.training && counter == TRAINING_TIME)
@@ -147,11 +159,50 @@ public class CommercialDetector extends AbstractDetector
 		counter++;
 	}
 
+	ArrayList<Segment> postFillSegments(List<Segment> result)
+	{
+		ArrayList<Segment> normalSegments = new ArrayList<>();
+
+		if(result.size() > 1) {
+			//insert start
+			for (int i = 0; i < result.size() - 1; i++) {
+				Segment current = result.get(i);
+				Segment next = result.get(i + 1);
+
+				double currentEnd =current.start + current.duration;
+
+				normalSegments.add(new Segment(currentEnd, next.start - currentEnd));
+			}
+		}
+
+		//add full if no commercial detected
+		if(result.size() == 0) {
+			normalSegments.add(new Segment(0, currentTime));
+			return normalSegments;
+		}
+
+		//add start and end if at least one was detected
+		if(result.size() > 0) {
+			Segment first = result.get(0);
+			Segment last = result.get(result.size() - 1);
+
+			double lastEnd = last.start + last.duration;
+
+			normalSegments.add(new Segment(0, first.start));
+			normalSegments.add(new Segment(lastEnd, currentTime - lastEnd));
+		}
+
+		return normalSegments;
+	}
+
 	/***
 	 * Fills spaces with commercial or normal
 	 */
 	void postProcessSegments(List<Segment> result)
 	{
+		if(result.size() == 0)
+			return;
+
 		for(int i = 0; i < result.size() - 1; i++)
 		{
 			Segment current = result.get(i);
